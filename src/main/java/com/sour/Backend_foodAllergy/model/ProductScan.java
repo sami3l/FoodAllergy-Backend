@@ -18,24 +18,23 @@ import java.util.List;
 public class ProductScan {
 
     @Id
-    private Long id;
+    private String id;
 
     private String productText;
     private String imageUrl;
     private List<String> detectedAllergens;
     private String riskLevel;
-    private String source; // "OCR" or "API"
+    private String source; // "OCR" || "API"
 
     private String productName;
     private String barcode;
 
-  // Utiliser ObjectId au lieu de Long
+  // Utiliser ObjectId au lieu de Long ??
 
-    private Long userId;
+    private String userId;
 
     @CreatedDate
     private LocalDateTime createdAt;
 
-    // Optional: Track status if you support async scans
     private String status;
 }

@@ -14,5 +14,5 @@ public interface ProductScanRepository extends MongoRepository<ProductScan, Stri
 
     Page<ProductScan> findByUserId(String userId, Pageable pageable);  // String version with pagination
 
-    List<ProductScan> findByUserId(Long userId);  // ObjectId version
+    List<ProductScan> findByUserId(String userId);  // ObjectId version
 }
