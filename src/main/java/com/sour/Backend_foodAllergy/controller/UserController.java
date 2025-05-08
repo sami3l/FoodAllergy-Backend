@@ -1,6 +1,5 @@
 package com.sour.Backend_foodAllergy.controller;
 
-
 import com.sour.Backend_foodAllergy.dto.ProductInfoResponse;
 import com.sour.Backend_foodAllergy.model.ProductScan;
 import com.sour.Backend_foodAllergy.model.User;
@@ -30,9 +29,10 @@ public class UserController {
         return ResponseEntity.ok(userRepository.save(user));
     }
 
+    // Using String for the user ID (no ObjectId)
     @GetMapping("/{id}")
-    public ResponseEntity<?> getUser(@PathVariable Long id) {
-        Optional<User> userOpt = userRepository.findById(id);
+    public ResponseEntity<?> getUser(@PathVariable String id) {
+        Optional<User> userOpt = userRepository.findById(Long.valueOf(id));  // No need for ObjectId conversion
         return userOpt.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -41,14 +41,16 @@ public class UserController {
         return ResponseEntity.ok(userRepository.findAll());
     }
 
+    // Using String for the userId in the scan method (no ObjectId)
     @GetMapping("/scans/user/{userId}")
-    public ResponseEntity<?> getScansByUser(@PathVariable Long userId) {
-        Optional<User> userOpt = userRepository.findById(userId);
+    public ResponseEntity<?> getScansByUser(@PathVariable String userId) {
+        Optional<User> userOpt = userRepository.findById(Long.valueOf(userId));  // Directly use String for userId
         if (userOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found");
         }
 
-        List<ProductScan> scans = scanRepository.findByUserId(userId);
+        // Use the String version of the method
+        List<ProductScan> scans = scanRepository.findByUserId(Long.valueOf(userId));
 
         List<ProductInfoResponse> response = scans.stream().map(scan ->
                 new ProductInfoResponse(
@@ -66,5 +68,4 @@ public class UserController {
 
         return ResponseEntity.ok(response);
     }
-
 }

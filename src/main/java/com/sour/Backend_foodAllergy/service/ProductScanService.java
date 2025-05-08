@@ -58,7 +58,7 @@ public class ProductScanService {
 
         // Step 5: Create and store scan record
         ProductScan scan = new ProductScan();
-        scan.setUserId(request.getUserId());
+        scan.setUserId(Long.valueOf(request.getUserId()));
         scan.setProductText(productText);
         scan.setDetectedAllergens(matchedAllergens);
         scan.setRiskLevel(riskLevel);

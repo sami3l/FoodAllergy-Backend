@@ -1,6 +1,7 @@
 package com.sour.Backend_foodAllergy.model;
 
 import lombok.*;
+import org.bson.types.ObjectId;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
@@ -17,7 +18,7 @@ import java.util.List;
 public class ProductScan {
 
     @Id
-    private String id;
+    private Long id;
 
     private String productText;
     private String imageUrl;
@@ -28,8 +29,9 @@ public class ProductScan {
     private String productName;
     private String barcode;
 
-    @Indexed
-    private String userId;
+  // Utiliser ObjectId au lieu de Long
+
+    private Long userId;
 
     @CreatedDate
     private LocalDateTime createdAt;
