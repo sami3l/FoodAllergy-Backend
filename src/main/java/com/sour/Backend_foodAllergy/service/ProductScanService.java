@@ -8,12 +8,15 @@ import com.sour.Backend_foodAllergy.model.User;
 import com.sour.Backend_foodAllergy.repository.ProductScanRepository;
 import com.sour.Backend_foodAllergy.repository.UserRepository;
 import com.sour.Backend_foodAllergy.utils.OpenFoodFactsClient;
+import org.springframework.data.annotation.Id;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 @Service
@@ -36,7 +39,7 @@ public class ProductScanService {
 
     public ScanResponse scanProduct(ScanRequest request) {
         // Step 1: Get user
-        User user = userRepository.findById(Long.valueOf(request.getUserId()))
+        User user = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         // Step 2: Get product info if barcode is provided (including image URL)
@@ -50,7 +53,11 @@ public class ProductScanService {
 
         // Step 3: Detect allergens using NLP-based AllergyService
         String productText = request.getProductText() != null ? request.getProductText() : "";
-        String userAllergyStr = user.getAllergies().toString();
+
+        // Ensure allergies list is not null
+        List<String> allergies = user.getAllergies() != null ? user.getAllergies() : new ArrayList<>();
+        String userAllergyStr = allergies.toString();
+
         List<String> matchedAllergens = allergyService.detectAllergens(productText, userAllergyStr);
 
         // Step 4: Estimate risk level
@@ -58,15 +65,16 @@ public class ProductScanService {
 
         // Step 5: Create and store scan record
         ProductScan scan = new ProductScan();
-        scan.setUserId(request.getUserId());
+        scan.setUserId(request.getUserId()); // Now a String
         scan.setProductText(productText);
         scan.setDetectedAllergens(matchedAllergens);
         scan.setRiskLevel(riskLevel);
         scan.setProductName(request.getProductName());
         scan.setBarcode(request.getBarcode());
-        scan.setSource(request.getBarcode() != null && !request.getBarcode().isEmpty() ? "API" : "OCR");
-        scan.setImageUrl(imageUrl);  // Set the image URL directly from API
+        scan.setSource((request.getBarcode() != null && !request.getBarcode().isEmpty()) ? "API" : "OCR");
+        scan.setImageUrl(imageUrl);
         scan.setCreatedAt(LocalDateTime.now());
+        scan.setStatus("Evaluated");
 
         productScanRepository.save(scan);
 
@@ -80,6 +88,13 @@ public class ProductScanService {
                 scan.getCreatedAt()
         );
     }
+
+
+    private List<String> extractIngredients(String productText) {
+        // Basic tokenizer; you could use NLP later
+        return Arrays.asList(productText.toLowerCase().split("[,\\s]+"));
+    }
+
 
     public Page<ProductScan> getScansByUser(String userId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);

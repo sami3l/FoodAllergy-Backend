@@ -16,5 +16,4 @@ public class ScanRequest {
     private String barcode;     // for OpenFoodFacts
     private String productName; // Added for storing product name
 
-
 }
