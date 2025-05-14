@@ -55,7 +55,7 @@ public class UserController {
     // Using String for the user ID (no ObjectId)
     @GetMapping("/{id}")
     public ResponseEntity<?> getUser(@PathVariable String id) {
-        Optional<User> userOpt = userRepository.findById(Long.valueOf(id));
+        Optional<User> userOpt = userRepository.findById(String.valueOf(Long.valueOf(id)));
         if (userOpt.isPresent()) {
             User user = userOpt.get();
             // Don't expose password in API responses
@@ -77,7 +77,7 @@ public class UserController {
     // Using String for the userId in the scan method (no ObjectId)
     @GetMapping("/scans/user/{userId}")
     public ResponseEntity<?> getScansByUser(@PathVariable String userId) {
-        Optional<User> userOpt = userRepository.findById(Long.valueOf(userId));
+        Optional<User> userOpt = userRepository.findById(String.valueOf(Long.valueOf(userId)));
         if (userOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found");
         }

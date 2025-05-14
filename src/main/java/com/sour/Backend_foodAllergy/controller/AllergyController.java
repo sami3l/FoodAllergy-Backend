@@ -101,7 +101,7 @@ public class AllergyController {
 
     @DeleteMapping("/user/{userId}/history")
     public ResponseEntity<?> deleteAllUserScans(@PathVariable String userId) {
-        Optional<User> userOpt = userRepository.findById(Long.valueOf(userId));
+        Optional<User> userOpt = userRepository.findById(String.valueOf(Long.valueOf(userId)));
         if (userOpt.isEmpty()) return ResponseEntity.badRequest().body("User not found");
 
         scanRepository.deleteByUserId(userId);
@@ -110,7 +110,7 @@ public class AllergyController {
 
     @GetMapping("/user/{userId}/allergies")
     public ResponseEntity<?> getUserAllergies(@PathVariable String userId) {
-        Optional<User> userOpt = userRepository.findById(Long.valueOf(userId));
+        Optional<User> userOpt = userRepository.findById(String.valueOf(Long.valueOf(userId)));
         if (userOpt.isEmpty()) return ResponseEntity.badRequest().body("User not found");
 
         User user = userOpt.get();
@@ -124,7 +124,7 @@ public class AllergyController {
             @PathVariable String userId,
             @RequestBody AllergyUpdateRequest request) {
 
-        Optional<User> userOpt = userRepository.findById(Long.valueOf(userId));
+        Optional<User> userOpt = userRepository.findById(String.valueOf(Long.valueOf(userId)));
         if (userOpt.isEmpty()) return ResponseEntity.badRequest().body("User not found");
 
         User user = userOpt.get();
