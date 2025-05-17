@@ -12,13 +12,19 @@ import com.sour.Backend_foodAllergy.service.AllergyService;
 import com.sour.Backend_foodAllergy.service.ProductScanService;
 import com.sour.Backend_foodAllergy.utils.OpenFoodFactsClient;
 
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -26,6 +32,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api")
+@RequiredArgsConstructor
 public class AllergyController {
 
     private final UserRepository userRepository;
@@ -34,42 +41,44 @@ public class AllergyController {
     private final OpenFoodFactsClient openFoodFactsClient;
     private final ProductScanService productScanService;
 
-    public AllergyController(UserRepository userRepository,
-                             ProductScanRepository scanRepository,
-                             AllergyService allergyService,
-                             OpenFoodFactsClient openFoodFactsClient,
-                             ProductScanService productScanService) {
-        this.userRepository = userRepository;
-        this.scanRepository = scanRepository;
-        this.allergyService = allergyService;
-        this.openFoodFactsClient = openFoodFactsClient;
-        this.productScanService = productScanService;
-    }
-
     @GetMapping("/hello")
     public String sayhi() {
         return "Hello from FoodAllergyAI 👋";
     }
 
+
+
+
     @PostMapping(value = "/evaluate", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> evaluate(@RequestBody ScanRequest request) {
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> evaluate(
+            @RequestBody ScanRequest request,
+            @AuthenticationPrincipal UserDetails currentUser
+    ) {
         try {
-            // Using the new ProductScanService to handle all the scan logic
-            ScanResponse response = productScanService.scanProduct(request);
+            // on récupère l'identifiant (ou username) depuis le JWT
+            String username = currentUser.getUsername();
+            ScanResponse response = productScanService.scanProduct(request, username);
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+
+        } catch (Exception e) {
+            // 404 si vraiment introuvable
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
         }
     }
 
     @GetMapping("/user/{userId}/history")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> getUserScanHistory(
             @PathVariable String userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
 
+        if (!isCurrentUser(userId) && !hasRole("ADMIN")) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
+        }
+
         try {
-            // Using the new ProductScanService to get user scan history
             Page<ProductScan> response = productScanService.getScansByUser(userId, page, size);
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
@@ -78,14 +87,15 @@ public class AllergyController {
     }
 
     @GetMapping("/scan/{scanId}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> getScanDetails(@PathVariable String scanId) {
         Optional<ProductScan> scanOpt = scanRepository.findById(scanId);
-        if (scanOpt.isEmpty()) return ResponseEntity.notFound().build();
-
-        return ResponseEntity.ok(scanOpt.get());
+        return scanOpt.<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @DeleteMapping("/scan/{scanId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> deleteScan(@PathVariable String scanId, @RequestParam String userId) {
         Optional<ProductScan> scanOpt = scanRepository.findById(scanId);
         if (scanOpt.isEmpty()) return ResponseEntity.notFound().build();
@@ -100,8 +110,9 @@ public class AllergyController {
     }
 
     @DeleteMapping("/user/{userId}/history")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> deleteAllUserScans(@PathVariable String userId) {
-        Optional<User> userOpt = userRepository.findById(String.valueOf(Long.valueOf(userId)));
+        Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) return ResponseEntity.badRequest().body("User not found");
 
         scanRepository.deleteByUserId(userId);
@@ -109,22 +120,31 @@ public class AllergyController {
     }
 
     @GetMapping("/user/{userId}/allergies")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> getUserAllergies(@PathVariable String userId) {
-        Optional<User> userOpt = userRepository.findById(String.valueOf(Long.valueOf(userId)));
+        if (!isCurrentUser(userId) && !hasRole("ADMIN")) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
+        }
+
+        Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) return ResponseEntity.badRequest().body("User not found");
 
         User user = userOpt.get();
         List<String> allergies = parseAllergiesList(user.getAllergies().toString());
-
         return ResponseEntity.ok(allergies);
     }
 
     @PutMapping("/user/{userId}/allergies")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> updateUserAllergies(
             @PathVariable String userId,
             @RequestBody AllergyUpdateRequest request) {
 
-        Optional<User> userOpt = userRepository.findById(String.valueOf(Long.valueOf(userId)));
+        if (!isCurrentUser(userId) && !hasRole("ADMIN")) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Unauthorized");
+        }
+
+        Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) return ResponseEntity.badRequest().body("User not found");
 
         User user = userOpt.get();
@@ -154,11 +174,20 @@ public class AllergyController {
         return ResponseEntity.ok(commonAllergens);
     }
 
-    private List<String> parseAllergiesList(String allergiesString) {
-        if (allergiesString == null || allergiesString.isEmpty()) {
-            return new ArrayList<>();
-        }
+    // 🔐 Méthodes utilitaires pour rôle et ID utilisateur
+    private boolean isCurrentUser(String userId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getName().equals(userId);
+    }
 
+    private boolean hasRole(String role) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_" + role));
+    }
+
+    private List<String> parseAllergiesList(String allergiesString) {
+        if (allergiesString == null || allergiesString.isEmpty()) return new ArrayList<>();
         return Arrays.stream(allergiesString.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())

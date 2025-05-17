@@ -10,8 +10,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ScanRequest {
-
-    private String userId;     // Changed from Long to String to match MongoDB ID format
+    // Changed from Long to String to match MongoDB ID format
     private String productText; // for OCR text
     private String barcode;     // for OpenFoodFacts
     private String productName; // Added for storing product name
