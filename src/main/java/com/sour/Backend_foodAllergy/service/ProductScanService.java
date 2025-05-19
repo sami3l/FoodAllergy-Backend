@@ -8,18 +8,23 @@ import com.sour.Backend_foodAllergy.model.User;
 import com.sour.Backend_foodAllergy.repository.ProductScanRepository;
 import com.sour.Backend_foodAllergy.repository.UserRepository;
 import com.sour.Backend_foodAllergy.utils.OpenFoodFactsClient;
-import org.springframework.data.annotation.Id;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
+@Transactional  // pour garantir l’atomicité de la méthode
 public class ProductScanService {
 
     private final ProductScanRepository productScanRepository;
@@ -27,61 +32,82 @@ public class ProductScanService {
     private final AllergyService allergyService;
     private final OpenFoodFactsClient openFoodFactsClient;
 
-    public ProductScanService(ProductScanRepository productScanRepository,
-                              UserRepository userRepository,
-                              AllergyService allergyService,
-                              OpenFoodFactsClient openFoodFactsClient) {
-        this.productScanRepository = productScanRepository;
-        this.userRepository = userRepository;
-        this.allergyService = allergyService;
-        this.openFoodFactsClient = openFoodFactsClient;
-    }
+    public ScanResponse scanProduct(ScanRequest request, String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ExceptionInInitializerError(
+                        username));
+        Set<String> userAllergySet = Optional.ofNullable(user.getAllergies())
+                .orElse(List.of())
+                .stream()
+                .map(String::toLowerCase)
+                .collect(Collectors.toSet());
 
-    public ScanResponse scanProduct(ScanRequest request) {
-        // Step 1: Get user
-        User user = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        // Step 2: Get product info if barcode is provided (including image URL)
-        String imageUrl = null;
-        if (request.getBarcode() != null && !request.getBarcode().isEmpty()) {
-            ProductInfoResponse productInfo = openFoodFactsClient.getProductInfo(request.getBarcode());
-            if (productInfo != null && productInfo.getImageUrl() != null) {
-                imageUrl = productInfo.getImageUrl();
-            }
+        // 1) Récupération des données OpenFoodFacts
+        ProductInfoResponse info = null;
+        if (request.getBarcode() != null && !request.getBarcode().isBlank()) {
+            info = openFoodFactsClient.getProductInfo(request.getBarcode());
         }
 
-        // Step 3: Detect allergens using NLP-based AllergyService
-        String productText = request.getProductText() != null ? request.getProductText() : "";
+        // 2) Construction de la liste d’ingrédients
+        String ingredientsText = (info != null && info.getIngredients() != null)
+                ? info.getIngredients()
+                : Optional.ofNullable(request.getProductText()).orElse("");
 
-        // Ensure allergies list is not null
-        List<String> allergies = user.getAllergies() != null ? user.getAllergies() : new ArrayList<>();
-        String userAllergyStr = allergies.toString();
+        List<String> ingredients = extractIngredients(ingredientsText);
 
-        List<String> matchedAllergens = allergyService.detectAllergens(productText, userAllergyStr);
+        // 3) Détection d’allergènes par liste
+        List<String> matchedAllergens = allergyService
+                .detectAllergensInIngredients(ingredients, userAllergySet);
 
-        // Step 4: Estimate risk level
+        // 4) Estimation du risque
         String riskLevel = allergyService.estimateRisk(matchedAllergens);
 
-        // Step 5: Create and store scan record
+        // 5) Persister le scan
+        ProductScan scan = saveProductScan(request, username, ingredients,
+                matchedAllergens, riskLevel, info);
+
+        // 6) Retourner le DTO
+        return toScanResponse(scan);
+    }
+
+    private List<String> extractIngredients(String ingredientsText) {
+        return Arrays.stream(ingredientsText
+                        .toLowerCase()
+                        .split("[,;\\s]+"))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList());
+    }
+
+    // méthode auxiliaire
+    private String fetchImageUrl(String barcode) {
+        if (barcode==null || barcode.isBlank()) return null;
+        ProductInfoResponse info = openFoodFactsClient.getProductInfo(barcode);
+        return Optional.ofNullable(info).map(ProductInfoResponse::getImageUrl).orElse(null);
+    }
+
+    private ProductScan saveProductScan(ScanRequest req,
+                                        List<String> matchedAllergens,
+                                        String riskLevel,
+                                        String imageUrl) {
         ProductScan scan = new ProductScan();
-        scan.setUserId(request.getUserId()); // Now a String
-        scan.setProductText(productText);
+        scan.setProductName(req.getProductName());
+        scan.setBarcode(req.getBarcode());
+        scan.setProductText(Optional.ofNullable(req.getProductText()).orElse(""));
         scan.setDetectedAllergens(matchedAllergens);
         scan.setRiskLevel(riskLevel);
-        scan.setProductName(request.getProductName());
-        scan.setBarcode(request.getBarcode());
-        scan.setSource((request.getBarcode() != null && !request.getBarcode().isEmpty()) ? "API" : "OCR");
+        scan.setSource((req.getBarcode() != null && !req.getBarcode().isBlank()) ? "API" : "OCR");
         scan.setImageUrl(imageUrl);
         scan.setCreatedAt(LocalDateTime.now());
         scan.setStatus("Evaluated");
 
-        productScanRepository.save(scan);
+        return productScanRepository.save(scan);
+    }
 
-        // Step 6: Return structured response
+    private ScanResponse toScanResponse(ProductScan scan) {
         return new ScanResponse(
-                matchedAllergens,
-                riskLevel,
+                scan.getDetectedAllergens(),
+                scan.getRiskLevel(),
                 scan.getProductName(),
                 scan.getImageUrl(),
                 scan.getSource(),
@@ -89,15 +115,40 @@ public class ProductScanService {
         );
     }
 
-
-    private List<String> extractIngredients(String productText) {
-        // Basic tokenizer; you could use NLP later
-        return Arrays.asList(productText.toLowerCase().split("[,\\s]+"));
-    }
-
-
+    // Pagination des scans d’un utilisateur
     public Page<ProductScan> getScansByUser(String userId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
         return productScanRepository.findByUserId(userId, pageable);
+    }
+
+    private ProductScan saveProductScan(
+            ScanRequest req,
+            String username,
+            List<String> ingredients,
+            List<String> matchedAllergens,
+            String riskLevel,
+            ProductInfoResponse info
+    ) {
+        // Reconstruis ici le texte du produit depuis la liste d’ingrédients
+        String productText = String.join(", ", ingredients);
+
+        // Récupère l’URL de l’image si elle existe
+        String imageUrl = info != null ? info.getImageUrl() : null;
+
+        ProductScan scan = new ProductScan();
+        scan.setUserId(username);               // ou user.getId().toString()
+        scan.setProductName(req.getProductName());
+        scan.setBarcode(req.getBarcode());
+        scan.setProductText(productText);
+        scan.setDetectedAllergens(matchedAllergens);
+        scan.setRiskLevel(riskLevel);
+        scan.setSource(
+                req.getBarcode() != null && !req.getBarcode().isBlank() ? "API" : "OCR"
+        );
+        scan.setImageUrl(imageUrl);
+        scan.setCreatedAt(LocalDateTime.now());
+        scan.setStatus("Evaluated");
+
+        return productScanRepository.save(scan);
     }
 }

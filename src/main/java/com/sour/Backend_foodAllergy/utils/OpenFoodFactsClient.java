@@ -67,7 +67,7 @@ public class OpenFoodFactsClient {
             }
 
             // Parse allergens
-            String allergensStr = (String) product.get("allergens");
+            String allergensStr = (String) product.get("ingredients_text");
             if (allergensStr != null && !allergensStr.isEmpty()) {
                 List<String> allergens = new ArrayList<>();
                 for (String allergen : allergensStr.replace("en:", "").split(",")) {

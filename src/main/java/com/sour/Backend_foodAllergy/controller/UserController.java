@@ -7,11 +7,13 @@ import com.sour.Backend_foodAllergy.repository.ProductScanRepository;
 import com.sour.Backend_foodAllergy.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Optional;
+
 
 @RestController
 @RequestMapping("/api/users")
@@ -27,6 +29,7 @@ public class UserController {
         this.passwordEncoder = passwordEncoder;
     }
 
+
     @PostMapping("/register")
     public ResponseEntity<User> registerUser(@RequestBody User user) {
         // Check if username already exists
@@ -40,22 +43,11 @@ public class UserController {
         return ResponseEntity.status(HttpStatus.CREATED).body(userRepository.save(user));
     }
 
-    // Existing endpoint - modified to remove password from response
-    @PostMapping
-    public ResponseEntity<User> createUser(@RequestBody User user) {
-        // Encode password before saving
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
-        User savedUser = userRepository.save(user);
-
-        // Clear password before returning
-        savedUser.setPassword(null);
-        return ResponseEntity.ok(savedUser);
-    }
-
+    @PreAuthorize("isAuthenticated()")
     // Using String for the user ID (no ObjectId)
     @GetMapping("/{id}")
     public ResponseEntity<?> getUser(@PathVariable String id) {
-        Optional<User> userOpt = userRepository.findById(Long.valueOf(id));
+        Optional<User> userOpt = userRepository.findById(String.valueOf(Long.valueOf(id)));
         if (userOpt.isPresent()) {
             User user = userOpt.get();
             // Don't expose password in API responses
@@ -66,18 +58,31 @@ public class UserController {
         }
     }
 
+    // Accessible uniquement par un utilisateur ADMIN
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping
+    public ResponseEntity<User> createUser(@RequestBody User user) {
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        User savedUser = userRepository.save(user);
+        savedUser.setPassword(null);
+        return ResponseEntity.ok(savedUser);
+    }
+
+    // Accessible uniquement par un utilisateur ADMIN
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
     public ResponseEntity<List<User>> getAllUsers() {
         List<User> users = userRepository.findAll();
-        // Don't expose passwords in API responses
         users.forEach(user -> user.setPassword(null));
         return ResponseEntity.ok(users);
     }
 
+
     // Using String for the userId in the scan method (no ObjectId)
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/scans/user/{userId}")
     public ResponseEntity<?> getScansByUser(@PathVariable String userId) {
-        Optional<User> userOpt = userRepository.findById(Long.valueOf(userId));
+        Optional<User> userOpt = userRepository.findById(String.valueOf(Long.valueOf(userId)));
         if (userOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found");
         }
@@ -102,7 +107,10 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
 
+
     // Add a new endpoint to find user by username (useful for testing)
+
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/by-username/{username}")
     public ResponseEntity<?> getUserByUsername(@PathVariable String username) {
         Optional<User> userOpt = userRepository.findByUsername(username);
