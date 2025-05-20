@@ -92,6 +92,7 @@ public class UserController {
 
         List<ProductInfoResponse> response = scans.stream().map(scan ->
                 new ProductInfoResponse(
+                        scan.getId(),
                         scan.getProductName(),
                         scan.getBarcode(),
                         scan.getProductText(),
@@ -123,4 +124,5 @@ public class UserController {
             return ResponseEntity.notFound().build();
         }
     }
+
 }

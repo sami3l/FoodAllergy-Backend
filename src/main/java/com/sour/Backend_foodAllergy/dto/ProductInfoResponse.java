@@ -4,6 +4,9 @@ package com.sour.Backend_foodAllergy.dto;
 import java.util.List;
 
 public class ProductInfoResponse {
+
+    private String id; // ✅ Ajouté ici
+
     private String productName;
     private String barcode;
     private String ingredients;
@@ -14,21 +17,21 @@ public class ProductInfoResponse {
     private List<String> allergens;
     private String servingSize;
 
-    // Default constructor
+    // Constructeurs
     public ProductInfoResponse() {
     }
 
-    // Constructor with essential parameters
-    public ProductInfoResponse(String productName, String barcode, String ingredients) {
+    public ProductInfoResponse(String id, String productName, String barcode, String ingredients) {
+        this.id = id;
         this.productName = productName;
         this.barcode = barcode;
         this.ingredients = ingredients;
     }
 
-    // Full constructor
-    public ProductInfoResponse(String productName, String barcode, String ingredients,
+    public ProductInfoResponse(String id, String productName, String barcode, String ingredients,
                                String imageUrl, String brand, List<String> categories,
                                String nutriscoreGrade, List<String> allergens, String servingSize) {
+        this.id = id;
         this.productName = productName;
         this.barcode = barcode;
         this.ingredients = ingredients;
@@ -39,7 +42,6 @@ public class ProductInfoResponse {
         this.allergens = allergens;
         this.servingSize = servingSize;
     }
-
     // Getters and setters
     public String getProductName() {
         return productName;
@@ -95,6 +97,14 @@ public class ProductInfoResponse {
 
     public void setNutriscoreGrade(String nutriscoreGrade) {
         this.nutriscoreGrade = nutriscoreGrade;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
     }
 
     public List<String> getAllergens() {

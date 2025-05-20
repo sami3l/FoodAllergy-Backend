@@ -160,13 +160,29 @@ public class AllergyController {
             return ResponseEntity.badRequest().body("Barcode is required");
         }
 
+        // Appel à OpenFoodFacts
         ProductInfoResponse productInfo = openFoodFactsClient.getProductInfo(barcode);
         if (productInfo == null) {
             return ResponseEntity.notFound().build();
         }
 
+        // Sauvegarde temporaire d’un ProductScan pour générer un id
+        ProductScan scan = new ProductScan();
+        scan.setBarcode(barcode);
+        scan.setProductName(productInfo.getProductName());
+        scan.setProductText(productInfo.getIngredients());
+        scan.setImageUrl(productInfo.getImageUrl());
+        scan.setSource("API");
+        scan.setStatus("Pending");
+        scan.setCreatedAt(java.time.LocalDateTime.now());
+
+
+        // Injecter l'id dans la réponse
+        productInfo.setId(scan.getId());
+
         return ResponseEntity.ok(productInfo);
     }
+
 
     @GetMapping("/allergens/common")
     public ResponseEntity<?> getCommonAllergens() {

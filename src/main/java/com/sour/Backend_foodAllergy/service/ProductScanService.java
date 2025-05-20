@@ -111,7 +111,8 @@ public class ProductScanService {
                 scan.getProductName(),
                 scan.getImageUrl(),
                 scan.getSource(),
-                scan.getCreatedAt()
+                scan.getCreatedAt(),
+                extractIngredients(scan.getProductText())  // ← Ajoute la vraie liste des ingrédients
         );
     }
 
@@ -136,7 +137,8 @@ public class ProductScanService {
         String imageUrl = info != null ? info.getImageUrl() : null;
 
         ProductScan scan = new ProductScan();
-        scan.setUserId(username);               // ou user.getId().toString()
+        scan.setUserId(username);
+        // ou user.getId().toString()
         scan.setProductName(req.getProductName());
         scan.setBarcode(req.getBarcode());
         scan.setProductText(productText);
